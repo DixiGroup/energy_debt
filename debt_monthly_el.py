@@ -1,9 +1,6 @@
 ﻿import os
 import pandas as pd
 
-os.chdir('C:\\Users\\apelianer\\Desktop\\Dixi\\debt_monthly')
-wd = os.getcwd()
-
 # lookup for months
 months_ukr = ["січень", "лютий", "березень", "квітень", "травень", "червень",
               "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
@@ -61,7 +58,6 @@ def parse_single_sheet(xlfile, sheet_name, energy_type = 'el'):
     idx_to_split = idx_total[1]+1
     
     debtdf_el = debtdf.iloc[:idx_to_split,:]
-    debtdf_heat = debtdf.iloc[idx_to_split:,:]    
     
     # filter redundant rows & create general consumer category var
     debtdf_el = debtdf_el[debtdf_el['consumer_type'].notnull()]
@@ -114,42 +110,9 @@ def parse_single_sheet(xlfile, sheet_name, energy_type = 'el'):
     cols = cols[-2:]+cols[-3:-2]+cols[-4:-3]+cols[-5:-4]+cols[:-5]
     debtdf_el = debtdf_el[cols]
     
-    # repeat for heat df (attention, other indices)
-    debtdf_heat = debtdf_heat[debtdf_heat['consumer_type'].notnull()]
-    debtdf_heat = debtdf_heat[debtdf_heat['consumer_type'] != 1]
-    debtdf_heat = debtdf_heat[~debtdf_heat['consumer_type'].str.contains("сього|тому числі", na = False)]
-    
-    debtdf_heat.loc[debtdf_heat['consumer_type'].str.contains('\d.'), 'consumer_cat'] = debtdf_heat.loc[debtdf_heat['consumer_type'].str.contains('\d.'), 'consumer_type']
-    debtdf_heat['consumer_cat'] = debtdf_heat['consumer_cat'].ffill().str.replace('\d.|,', '').str.lower().str.strip()
-    debtdf_heat = debtdf_heat[debtdf_heat['consumer_type'] != '2. Житлокомунгосп,']
-    
-    debtdf_heat = debtdf_heat.reset_index(drop = True)
-    index_to_exclude = debtdf_heat[debtdf_heat['consumer_type'].str.contains('3.')].index[0]+1
-    debtdf_heat = debtdf_heat.iloc[:index_to_exclude,:]
-    debtdf_heat = debtdf_heat.reset_index(drop = True)
-    debtdf_heat['consumer_type'] = ['промисловість',
-     'населення',
-     'держ.бюджет',
-     'місц.бюджет',
-     'житлокомунгосп (інші)',
-     'інші споживачі']
-    
-    company = company_heat
-    del(company_heat)
-    debtdf_heat = debtdf_heat.assign(company = company, 
-                                     oblast = oblast,
-                                     year = str.split(current_month, sep = ' ')[1],
-                                     month = int(months_lookup['months_dig'][months_lookup['months_ukr'] == str.split(current_month, sep = ' ')[0]]))
-    cols = debtdf_heat.columns.tolist()
-    cols = cols[-2:]+cols[-3:-2]+cols[-4:-3]+cols[-5:-4]+cols[:-5]
-    debtdf_heat = debtdf_heat[cols]
-    
-    if(energy_type == 'el'):
-        return debtdf_el
-    else:
-        return debtdf_heat
+    return debtdf_el
 
-def load_all_sheets(filename, energy_type = 'el'):
+def load_all_sheets(filename):
     filepath = os.path.join('raw data', filename)
     xlfile = pd.ExcelFile(filepath)
     sheet_names_series = pd.Series(xlfile.sheet_names)
@@ -158,7 +121,7 @@ def load_all_sheets(filename, energy_type = 'el'):
     
     list_ = []
     for sheet in sheet_names_to_read:
-        df = parse_single_sheet(xlfile, sheet, energy_type = energy_type)
+        df = parse_single_sheet(xlfile, sheet)
         list_.append(df)
     frame = pd.concat(list_)
     return(frame)
@@ -168,25 +131,16 @@ raw_data_files = os.listdir('raw data')
 
 list_el = []
 for fi in raw_data_files:
-    df = load_all_sheets(fi, energy_type = 'el')
+    df = load_all_sheets(fi)
     list_el.append(df)
 frame_el = pd.concat(list_el).sort_values(by = ['year', 'month'])
+
+frame_el_only = frame_el.loc[~frame_el.company.str.contains('ТЕЦ|Київтепло'), :]
 
 # create folder open data if it doesn't exist
 od_folder = 'open data' 
 if not os.path.exists(od_folder):
     os.makedirs(od_folder)
 
-frame_el.to_excel(os.path.join('open data', 'debt_el_full.xlsx'), index = False)
-frame_el.to_csv(os.path.join('open data', 'debt_el_full.csv'), index = False)
-
-# the same for heat - currently disabled until the data gets validated
-
-#list_heat = []
-#for fi in raw_data_files:
-#    df = load_all_sheets(fi, energy_type = 'heat')
-#    list_heat.append(df)
-#frame_heat = pd.concat(list_heat).sort_values(by = ['year', 'month'])
-#    
-#frame_heat.to_excel('open data\\debt_heat_full.xlsx', index = False)
-#frame_heat.to_csv('open data\\debt_heat_full.csv', index = False)
+frame_el_only.to_excel(os.path.join('open data', 'debt_el_full.xlsx'), index = False)
+frame_el_only.to_csv(os.path.join('open data', 'debt_el_full.csv'), index = False)
