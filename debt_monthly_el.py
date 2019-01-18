@@ -1,6 +1,10 @@
 ﻿import os
 import pandas as pd
 
+os.chdir('C:\\Users\\apelianer\\Desktop\\Dixi\\debt_monthly')
+wd = os.getcwd()
+os.listdir(wd)
+
 # lookup for months
 months_ukr = ["січень", "лютий", "березень", "квітень", "травень", "червень",
               "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
@@ -23,11 +27,20 @@ def parse_single_sheet(xlfile, sheet_name, energy_type = 'el'):
     
     # get month, company, and oblast
     
-    current_month_index = debtdf.loc[pd.notnull(debtdf['consumer_type']) & debtdf['consumer_type'].str.contains('року')].index[0]
-    current_month = debtdf['consumer_type'][current_month_index].replace(' за ', '').replace(' року', '')
-    current_month
-    
-    company = debtdf['consumer_type'][current_month_index+1]
+    if any(pd.notnull(debtdf['consumer_type']) & debtdf['consumer_type'].str.contains('року')):
+        current_month_index = debtdf.loc[pd.notnull(debtdf['consumer_type']) & debtdf['consumer_type'].str.contains('року')].index[0]
+        current_month = debtdf['consumer_type'][current_month_index].replace(' за ', '').replace(' року', '').replace(' (оп.)', '').replace('  ', ' ').replace('  ', ' ')
+        current_month
+    elif any(pd.notnull(debtdf['paid_month_tuah']) & debtdf['paid_month_tuah'].str.contains('оп.')):
+        current_month_index = debtdf.loc[pd.notnull(debtdf['paid_month_tuah']) & debtdf['paid_month_tuah'].str.contains('оп.')].index[0]
+        pre_current_month = debtdf['paid_month_tuah'][current_month_index].replace(' (оп.)', '').replace(' ', '')
+        current_year_index = debtdf.loc[pd.notnull(debtdf['debt_year_start']) & debtdf['debt_year_start'].str.contains(' р.')].index[0]
+        current_year = debtdf['debt_year_start'][current_year_index].replace(' р.', '')[-4:]
+        current_month = pre_current_month + ' ' + current_year
+    else:
+        current_month = ''
+
+    company = debtdf['consumer_type'][3]
     if(pd.isnull(company)):
         company = debtdf['consumer_type'].iloc[10]
 
@@ -48,6 +61,8 @@ def parse_single_sheet(xlfile, sheet_name, energy_type = 'el'):
     debtdf_el = debtdf_el[debtdf_el['consumer_type'] != '1.Промисловість']
     
     # replace values which are not really sums
+    debtdf_el = debtdf_el.reset_index(drop = True)
+    debtdf_el.iloc[:, 1:9] = debtdf_el.iloc[:, 1:9].apply(pd.to_numeric, errors = "coerce")
     debtdf_el.iloc[8, 1:9] = debtdf_el.iloc[8, 1:9]-debtdf_el.iloc[9, 1:9]
     debtdf_el.iloc[-3, 1:9] = debtdf_el.iloc[-3, 1:9]-debtdf_el.iloc[-2, 1:9]-debtdf_el.iloc[-1, 1:9]
 
@@ -89,18 +104,25 @@ def parse_single_sheet(xlfile, sheet_name, energy_type = 'el'):
     
     return debtdf_el
 
+messages = []
 def load_all_sheets(filename):
     filepath = os.path.join('raw data', filename)
     xlfile = pd.ExcelFile(filepath)
     sheet_names_series = pd.Series(xlfile.sheet_names)
-    cond = ~sheet_names_series.str.contains('!|сього|ТЕЦ|тепло|_оплата')
+    cond = ~sheet_names_series.str.contains('!|сього|ТЕЦ|тепло|_оплата|ПівдЗахЕС|ЦентрЕС')
     sheet_names_to_read = sheet_names_series[cond][:-1]
     
     list_ = []
+    global messages
     for sheet in sheet_names_to_read:
         print(sheet)
-        df = parse_single_sheet(xlfile, sheet)
-        list_.append(df)
+        try:
+            df = parse_single_sheet(xlfile, sheet)
+            list_.append(df)
+        except:
+            m = 'Could not parse sheet ' + sheet + ' from file ' + filename
+            print(m)
+            messages.append(m)
     frame = pd.concat(list_)
     return(frame)
 
@@ -117,6 +139,7 @@ frame_el = pd.concat(list_el).sort_values(by = ['year', 'month'])
 frame_el['company'][frame_el['company'].isnull()] = frame_el['oblast'][frame_el['company'].isnull()]
 
 frame_el_only = frame_el.loc[~frame_el['company'].str.contains('ТЕЦ|тепло')]
+print(messages)
 
 # create folder open data if it doesn't exist
 od_folder = 'open data' 
