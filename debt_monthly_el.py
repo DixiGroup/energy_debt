@@ -1,10 +1,6 @@
 ﻿import os
 import pandas as pd
 
-os.chdir('C:\\Users\\apelianer\\Desktop\\Dixi\\debt_monthly')
-wd = os.getcwd()
-os.listdir(wd)
-
 # lookup for months
 months_ukr = ["січень", "лютий", "березень", "квітень", "травень", "червень",
               "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"]
